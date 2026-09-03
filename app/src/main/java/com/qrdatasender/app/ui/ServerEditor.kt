@@ -22,7 +22,8 @@ fun ServerEditor(
     initial: ServerConfig,
     allServers: List<ServerConfig>,
     onDismiss: () -> Unit,
-    onSave: (ServerConfig) -> Unit
+    onSave: (ServerConfig) -> Unit,
+    imported: Boolean = false
 ) {
     var name by remember { mutableStateOf(initial.name) }
     var method by remember { mutableStateOf(initial.method) }
@@ -36,7 +37,7 @@ fun ServerEditor(
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column {
                 TopAppBar(
-                    title = { Text(if (initial.name.isBlank()) "New server" else "Edit server") },
+                    title = { Text(if (imported) "Review setup QR" else if (initial.name.isBlank()) "New server" else "Edit server") },
                     navigationIcon = { IconButton(onDismiss) { Icon(Icons.Default.Close, "Close") } },
                     actions = {
                         TextButton(onClick = {
@@ -49,6 +50,9 @@ fun ServerEditor(
                     Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp, 10.dp, 20.dp, 48.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
+                    if (imported) item {
+                        Text("Review this destination before saving. Nothing has been sent. Saving adds and selects this server.", color = MaterialTheme.colorScheme.primary)
+                    }
                     item {
                         Text("Destination", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(12.dp))

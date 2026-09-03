@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.qrdatasender.app.data.ServerStore
+import com.qrdatasender.app.data.ServerQrParser
 import com.qrdatasender.app.model.*
 import com.qrdatasender.app.network.RequestEngine
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +31,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _screenTimeoutSeconds = MutableStateFlow(store.screenTimeoutSeconds())
     val screenTimeoutSeconds = _screenTimeoutSeconds.asStateFlow()
     private var busy = false
+    private val _importDraft = MutableStateFlow<ServerConfig?>(null)
+    val importDraft = _importDraft.asStateFlow()
+
+    fun finishImport(server: ServerConfig? = null) {
+        if (server != null) {
+            upsert(server)
+            select(server.id)
+        }
+        _importDraft.value = null
+    }
 
     fun upsert(server: ServerConfig) {
         _servers.value = _servers.value.toMutableList().apply {
@@ -56,8 +67,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onScanned(value: String) {
-        if (busy || value.isBlank()) return
+        if (busy || _importDraft.value != null || value.isBlank()) return
         if (_lastScanned.value == value) return
+        try {
+            val config = ServerQrParser.parse(value, _servers.value)
+            if (config != null) {
+                _lastScanned.value = value
+                _transmissionDetails.value = null
+                _sendState.value = SendState.Idle
+                _importDraft.value = config
+                return
+            }
+        } catch (error: Exception) {
+            _lastScanned.value = value
+            _transmissionDetails.value = null
+            _sendState.value = SendState.Error("Setup QR: ${error.message}")
+            return
+        }
         val server = _servers.value.firstOrNull { it.id == _selectedId.value }
             ?: run { _sendState.value = SendState.Error("Select or add a server first"); return }
         _lastScanned.value = value

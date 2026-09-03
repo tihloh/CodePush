@@ -1,5 +1,7 @@
 # CodePush
 
+Quick server setup: encode the JSON in `server/setup-qr.json` into a QR, scan it, and review/save the imported server. See `server/SETUP-QR.md` for the template and optional response checks.
+
 A native Android scanner that sends QR/barcode contents to configurable HTTP endpoints.
 
 ## Features

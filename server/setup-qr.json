@@ -1,0 +1,14 @@
+{
+  "type": "codepush.server",
+  "version": 1,
+  "server": {
+    "name": "Budget",
+    "method": "POST",
+    "url": "https://your-server.com/scan_processor.php",
+    "fields": [
+      { "name": "user_id", "value": "42" },
+      { "name": "codevalue", "value": "{scan}" },
+      { "name": "extra", "value": "receive" }
+    ]
+  }
+}

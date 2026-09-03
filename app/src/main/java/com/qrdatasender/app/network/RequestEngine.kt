@@ -23,7 +23,7 @@ class RequestEngine(private val client: OkHttpClient = OkHttpClient()) {
             .filter { it.name.isNotBlank() }
             .associate { it.name.trim() to expandValue(it.value, scannedValue) }
             .toMutableMap()
-            .also { it.putIfAbsent("scan", scannedValue) }
+            .also { if (!it.containsKey("scan")) it["scan"] = scannedValue }
 
         var target = config.url
         val consumed = mutableSetOf<String>()

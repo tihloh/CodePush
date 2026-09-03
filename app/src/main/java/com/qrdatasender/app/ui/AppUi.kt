@@ -36,6 +36,7 @@ fun QrDataSenderApp(vm: AppViewModel) {
     val servers by vm.servers.collectAsStateWithLifecycle()
     val selectedId by vm.selectedId.collectAsStateWithLifecycle()
     val darkTheme by vm.darkTheme.collectAsStateWithLifecycle()
+    val importDraft by vm.importDraft.collectAsStateWithLifecycle()
     var tab by remember { mutableStateOf(Tab.SCAN) }
     var editing by remember { mutableStateOf<ServerConfig?>(null) }
 
@@ -91,6 +92,11 @@ fun QrDataSenderApp(vm: AppViewModel) {
     editing?.let { server ->
         ServerEditor(server, servers, onDismiss = { editing = null }, onSave = { vm.upsert(it); editing = null })
     }
+    importDraft?.let { server ->
+        key(server.id) {
+            ServerEditor(server, servers, onDismiss = { vm.finishImport() }, onSave = { vm.finishImport(it) }, imported = true)
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -112,6 +118,7 @@ private fun ScanScreen(
     val showDetails by vm.showDetails.collectAsStateWithLifecycle()
     val details by vm.transmissionDetails.collectAsStateWithLifecycle()
     val screenTimeout by vm.screenTimeoutSeconds.collectAsStateWithLifecycle()
+    val importDraft by vm.importDraft.collectAsStateWithLifecycle()
     var menu by remember { mutableStateOf(false) }
     val selected = servers.firstOrNull { it.id == selectedId }
 
@@ -127,7 +134,7 @@ private fun ScanScreen(
             if (cameraGranted) {
                 ScannerPreview(
                     modifier = Modifier.fillMaxSize(),
-                    enabled = state !is SendState.Sending,
+                    enabled = state !is SendState.Sending && importDraft == null,
                     activityKey = last,
                     timeoutSeconds = screenTimeout,
                     onCode = vm::onScanned
@@ -225,7 +232,7 @@ private fun StatusCard(
     details: TransmissionDetails?
 ) {
     val (icon, title, detail, color) = when (state) {
-        SendState.Idle -> listOf(Icons.Default.CenterFocusStrong, "Ready to scan", last ?: "No code scanned yet", MaterialTheme.colorScheme.secondary)
+        SendState.Idle -> listOf(Icons.Default.CenterFocusStrong, "Ready to scan", "Scan a code or server setup QR", MaterialTheme.colorScheme.secondary)
         is SendState.Sending -> listOf(Icons.Default.CloudUpload, "Sending", "To ${state.serverName}", MaterialTheme.colorScheme.primary)
         is SendState.Success -> listOf(Icons.Default.CheckCircle, "Success", "Request sent", Color(0xFF087F5B))
         is SendState.Error -> listOf(Icons.Default.Error, "Could not send", state.message, MaterialTheme.colorScheme.error)
@@ -321,7 +328,7 @@ private fun AboutScreen(darkTheme: Boolean, setDarkTheme: (Boolean) -> Unit, mod
         }
         Spacer(Modifier.height(20.dp))
         Text("CodePush", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Version 1.5.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Version 1.6.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(28.dp))
         Text("Developed by", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text("Tihloh", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
