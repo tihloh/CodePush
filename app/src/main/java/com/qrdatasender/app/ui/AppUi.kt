@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -19,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -27,12 +29,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qrdatasender.app.AppViewModel
 import com.qrdatasender.app.model.*
 
-private enum class Tab { SCAN, SERVERS }
+private enum class Tab { SCAN, SERVERS, SETTINGS, ABOUT }
 
 @Composable
 fun QrDataSenderApp(vm: AppViewModel) {
     val servers by vm.servers.collectAsStateWithLifecycle()
     val selectedId by vm.selectedId.collectAsStateWithLifecycle()
+    val darkTheme by vm.darkTheme.collectAsStateWithLifecycle()
     var tab by remember { mutableStateOf(Tab.SCAN) }
     var editing by remember { mutableStateOf<ServerConfig?>(null) }
 
@@ -40,23 +43,49 @@ fun QrDataSenderApp(vm: AppViewModel) {
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(
-                    selected = tab == Tab.SCAN,
-                    onClick = { tab = Tab.SCAN },
-                    icon = { Icon(Icons.Default.QrCodeScanner, null) },
-                    label = { Text("Scan") }
-                )
-                NavigationBarItem(
                     selected = tab == Tab.SERVERS,
                     onClick = { tab = Tab.SERVERS },
                     icon = { Icon(Icons.Default.Dns, null) },
                     label = { Text("Servers") }
                 )
+                NavigationBarItem(
+                    selected = tab == Tab.SCAN,
+                    onClick = { tab = Tab.SCAN },
+                    icon = {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                            shadowElevation = 6.dp,
+                            modifier = Modifier.size(54.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.QrCodeScanner, "Scan", Modifier.size(29.dp))
+                            }
+                        }
+                    },
+                    label = { Text("Scan", fontWeight = FontWeight.SemiBold) }
+                )
+                NavigationBarItem(
+                    selected = tab == Tab.SETTINGS,
+                    onClick = { tab = Tab.SETTINGS },
+                    icon = { Icon(Icons.Default.Settings, null) },
+                    label = { Text("Settings") }
+                )
+                NavigationBarItem(
+                    selected = tab == Tab.ABOUT,
+                    onClick = { tab = Tab.ABOUT },
+                    icon = { Icon(Icons.Default.Info, null) },
+                    label = { Text("About") }
+                )
             }
         }
     ) { padding ->
         when (tab) {
-            Tab.SCAN -> ScanScreen(vm, servers, selectedId, Modifier.padding(padding), onManage = { tab = Tab.SERVERS })
-            Tab.SERVERS -> ServerList(servers, selectedId, vm::select, { editing = it }, vm::delete, Modifier.padding(padding))
+            Tab.SCAN -> ScanScreen(vm, servers, selectedId, darkTheme, vm::setDarkTheme, Modifier.padding(padding), onManage = { tab = Tab.SERVERS })
+            Tab.SERVERS -> ServerList(servers, selectedId, darkTheme, vm::setDarkTheme, vm::select, { editing = it }, vm::delete, Modifier.padding(padding))
+            Tab.SETTINGS -> SettingsScreen(vm, darkTheme, Modifier.padding(padding))
+            Tab.ABOUT -> AboutScreen(darkTheme, vm::setDarkTheme, Modifier.padding(padding))
         }
     }
     editing?.let { server ->
@@ -70,6 +99,8 @@ private fun ScanScreen(
     vm: AppViewModel,
     servers: List<ServerConfig>,
     selectedId: String?,
+    darkTheme: Boolean,
+    setDarkTheme: (Boolean) -> Unit,
     modifier: Modifier,
     onManage: () -> Unit
 ) {
@@ -80,20 +111,30 @@ private fun ScanScreen(
     val last by vm.lastScanned.collectAsStateWithLifecycle()
     val showDetails by vm.showDetails.collectAsStateWithLifecycle()
     val details by vm.transmissionDetails.collectAsStateWithLifecycle()
+    val screenTimeout by vm.screenTimeoutSeconds.collectAsStateWithLifecycle()
     var menu by remember { mutableStateOf(false) }
     val selected = servers.firstOrNull { it.id == selectedId }
 
     Column(modifier.fillMaxSize()) {
-        Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
-            Text("QR Data Sender", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text("Scan once. Route anywhere.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 10.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("CodePush", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("Scan once. Route anywhere.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            ThemeButton(darkTheme, setDarkTheme)
         }
         Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(24.dp)).background(Color(0xFF071613))) {
             if (cameraGranted) {
-                ScannerPreview(Modifier.fillMaxSize(), enabled = state !is SendState.Sending, onCode = vm::onScanned)
+                ScannerPreview(
+                    modifier = Modifier.fillMaxSize(),
+                    enabled = state !is SendState.Sending,
+                    activityKey = last,
+                    timeoutSeconds = screenTimeout,
+                    onCode = vm::onScanned
+                )
                 Box(Modifier.align(Alignment.Center).size(230.dp).border(3.dp, Color.White.copy(alpha = .9f), RoundedCornerShape(24.dp)))
-                Surface(Modifier.align(Alignment.TopCenter).padding(14.dp), color = Color.Black.copy(alpha = .58f), shape = RoundedCornerShape(50)) {
-                    Text("Align any QR or barcode inside the frame", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = Color.White)
+                Surface(Modifier.align(Alignment.TopCenter).padding(10.dp), color = Color.Black.copy(alpha = .58f), shape = RoundedCornerShape(50)) {
+                    Text("Align code inside frame", Modifier.padding(horizontal = 12.dp, vertical = 5.dp), color = Color.White, style = MaterialTheme.typography.bodySmall)
                 }
             } else {
                 Column(Modifier.align(Alignment.Center).padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -121,6 +162,60 @@ private fun ScanScreen(
 }
 
 @Composable
+private fun SettingsScreen(vm: AppViewModel, darkTheme: Boolean, modifier: Modifier) {
+    val screenTimeout by vm.screenTimeoutSeconds.collectAsStateWithLifecycle()
+    Column(
+        modifier.fillMaxSize().padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
+    ) {
+        Text("Settings", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text("Appearance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(if (darkTheme) Icons.Default.DarkMode else Icons.Default.LightMode, null)
+                    Text(if (darkTheme) "Dark theme" else "Light theme", Modifier.weight(1f).padding(horizontal = 12.dp))
+                    Switch(checked = darkTheme, onCheckedChange = vm::setDarkTheme)
+                }
+            }
+        }
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Scanner", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("Let Android sleep when no new code is scanned.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                ScreenTimeoutSelector(screenTimeout, vm::setScreenTimeoutSeconds)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ScreenTimeoutSelector(current: Int, selected: (Int) -> Unit) {
+    val options = listOf(30 to "30 seconds", 60 to "1 minute", 120 to "2 minutes", 300 to "5 minutes", 0 to "Always awake")
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = options.firstOrNull { it.first == current }?.second ?: "1 minute",
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Allow screen sleep after") },
+            leadingIcon = { Icon(Icons.Default.Bedtime, null) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+            modifier = Modifier.fillMaxWidth().menuAnchor()
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { (seconds, label) ->
+                DropdownMenuItem(
+                    text = { Text(label) },
+                    onClick = { selected(seconds); expanded = false }
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun StatusCard(
     state: SendState,
     last: String?,
@@ -132,7 +227,7 @@ private fun StatusCard(
     val (icon, title, detail, color) = when (state) {
         SendState.Idle -> listOf(Icons.Default.CenterFocusStrong, "Ready to scan", last ?: "No code scanned yet", MaterialTheme.colorScheme.secondary)
         is SendState.Sending -> listOf(Icons.Default.CloudUpload, "Sending", "To ${state.serverName}", MaterialTheme.colorScheme.primary)
-        is SendState.Success -> listOf(Icons.Default.CheckCircle, "Sent · HTTP ${state.status}", state.message, Color(0xFF087F5B))
+        is SendState.Success -> listOf(Icons.Default.CheckCircle, "Success", "Request sent", Color(0xFF087F5B))
         is SendState.Error -> listOf(Icons.Default.Error, "Could not send", state.message, MaterialTheme.colorScheme.error)
     }
     Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
@@ -163,14 +258,17 @@ private fun StatusCard(
 
 @Composable
 private fun ServerList(
-    servers: List<ServerConfig>, selectedId: String?, select: (String?) -> Unit,
+    servers: List<ServerConfig>, selectedId: String?, darkTheme: Boolean, setDarkTheme: (Boolean) -> Unit, select: (String?) -> Unit,
     edit: (ServerConfig) -> Unit, delete: (String) -> Unit, modifier: Modifier
 ) {
     var deleteTarget by remember { mutableStateOf<ServerConfig?>(null) }
     Box(modifier.fillMaxSize()) {
         LazyColumn(contentPadding = PaddingValues(20.dp, 18.dp, 20.dp, 100.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
-                Text("Servers", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Servers", Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    ThemeButton(darkTheme, setDarkTheme)
+                }
                 Text("Saved destinations and response workflows", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
             }
@@ -196,6 +294,46 @@ private fun ServerList(
     deleteTarget?.let { target ->
         AlertDialog(onDismissRequest = { deleteTarget = null }, title = { Text("Delete ${target.name}?") }, text = { Text("This saved server will be removed from this device.") },
             confirmButton = { TextButton({ delete(target.id); deleteTarget = null }) { Text("Delete") } }, dismissButton = { TextButton({ deleteTarget = null }) { Text("Cancel") } })
+    }
+}
+
+@Composable
+private fun ThemeButton(darkTheme: Boolean, setDarkTheme: (Boolean) -> Unit) {
+    IconButton(onClick = { setDarkTheme(!darkTheme) }) {
+        Icon(if (darkTheme) Icons.Default.LightMode else Icons.Default.DarkMode, if (darkTheme) "Use light theme" else "Use dark theme")
+    }
+}
+
+@Composable
+private fun AboutScreen(darkTheme: Boolean, setDarkTheme: (Boolean) -> Unit, modifier: Modifier) {
+    val uriHandler = LocalUriHandler.current
+    Column(
+        modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("About", Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            ThemeButton(darkTheme, setDarkTheme)
+        }
+        Spacer(Modifier.weight(.7f))
+        Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+            Icon(Icons.Default.QrCodeScanner, null, Modifier.padding(22.dp).size(54.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+        }
+        Spacer(Modifier.height(20.dp))
+        Text("CodePush", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("Version 1.5.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(28.dp))
+        Text("Developed by", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Tihloh", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        Text("Christian Borsal Bustamante", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(16.dp))
+        OutlinedButton(onClick = { uriHandler.openUri("https://github.com/tihloh") }) {
+            Icon(Icons.Default.OpenInNew, null)
+            Spacer(Modifier.width(8.dp))
+            Text("github.com/tihloh")
+        }
+        Spacer(Modifier.weight(1f))
+        Text("Scan once. Route anywhere.", color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

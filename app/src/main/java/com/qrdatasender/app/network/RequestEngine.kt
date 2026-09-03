@@ -27,7 +27,7 @@ class RequestEngine(private val client: OkHttpClient = OkHttpClient()) {
 
         var target = config.url
         val consumed = mutableSetOf<String>()
-        val placeholder = Regex("""\{\{([A-Za-z_][A-Za-z0-9_.-]*)}}|\{([A-Za-z_][A-Za-z0-9_.-]*)}""")
+        val placeholder = Regex("""\{\{([A-Za-z_][A-Za-z0-9_.-]*)\}\}|\{([A-Za-z_][A-Za-z0-9_.-]*)\}""")
         target = placeholder.replace(target) { match ->
             val key = match.groupValues[1].ifBlank { match.groupValues[2] }
             val value = values[key] ?: throw IllegalArgumentException("No value supplied for {$key}")

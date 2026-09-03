@@ -8,7 +8,11 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -18,19 +22,41 @@ import com.google.mlkit.vision.barcode.BarcodeScanner
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.Executors
+import kotlinx.coroutines.delay
 
 @SuppressLint("UnsafeOptInUsageError")
 @Composable
-fun ScannerPreview(modifier: Modifier = Modifier, enabled: Boolean, onCode: (String) -> Unit) {
+fun ScannerPreview(
+    modifier: Modifier = Modifier,
+    enabled: Boolean,
+    activityKey: String?,
+    timeoutSeconds: Int,
+    onCode: (String) -> Unit
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val executor = remember { Executors.newSingleThreadExecutor() }
     val scanner = remember { BarcodeScanning.getClient() }
+    var keepAwake by remember { mutableStateOf(true) }
+
+    LaunchedEffect(activityKey, timeoutSeconds) {
+        keepAwake = true
+        if (timeoutSeconds > 0) {
+            delay(timeoutSeconds * 1_000L)
+            keepAwake = false
+        }
+    }
 
     AndroidView(
         modifier = modifier,
-        factory = { PreviewView(it).apply { scaleType = PreviewView.ScaleType.FILL_CENTER } },
+        factory = {
+            PreviewView(it).apply {
+                scaleType = PreviewView.ScaleType.FILL_CENTER
+                keepScreenOn = keepAwake
+            }
+        },
         update = { previewView ->
+            previewView.keepScreenOn = keepAwake
             val providerFuture = ProcessCameraProvider.getInstance(context)
             providerFuture.addListener({
                 val provider = providerFuture.get()
@@ -60,4 +86,3 @@ fun ScannerPreview(modifier: Modifier = Modifier, enabled: Boolean, onCode: (Str
         onDispose { scanner.close(); executor.shutdown() }
     }
 }
-

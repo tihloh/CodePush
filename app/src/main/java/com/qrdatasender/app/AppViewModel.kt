@@ -25,6 +25,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val showDetails = _showDetails.asStateFlow()
     private val _transmissionDetails = MutableStateFlow<TransmissionDetails?>(null)
     val transmissionDetails = _transmissionDetails.asStateFlow()
+    private val _darkTheme = MutableStateFlow(store.darkTheme())
+    val darkTheme = _darkTheme.asStateFlow()
+    private val _screenTimeoutSeconds = MutableStateFlow(store.screenTimeoutSeconds())
+    val screenTimeoutSeconds = _screenTimeoutSeconds.asStateFlow()
     private var busy = false
 
     fun upsert(server: ServerConfig) {
@@ -45,6 +49,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun select(id: String?) { _selectedId.value = id; store.select(id) }
     fun clearLast() { _lastScanned.value = null; _sendState.value = SendState.Idle }
     fun setShowDetails(value: Boolean) { _showDetails.value = value; store.setShowDetails(value) }
+    fun setDarkTheme(value: Boolean) { _darkTheme.value = value; store.setDarkTheme(value) }
+    fun setScreenTimeoutSeconds(value: Int) {
+        _screenTimeoutSeconds.value = value
+        store.setScreenTimeoutSeconds(value)
+    }
 
     fun onScanned(value: String) {
         if (busy || value.isBlank()) return
@@ -63,10 +72,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         ?: error("Follow-up server no longer exists")
                     val next = engine.send(followUp, value)
                     _transmissionDetails.value = TransmissionDetails(value, result.sent + "\n\nFollow-up:\n" + next.sent)
-                    _sendState.value = SendState.Success(next.status, "Matched response; sent to ${followUp.name}")
+                    _sendState.value = SendState.Success(next.status, "Sent to ${followUp.name}")
                 } else {
                     _transmissionDetails.value = TransmissionDetails(value, result.sent)
-                    _sendState.value = SendState.Success(result.status, result.body.take(160).ifBlank { "Request completed" })
+                    _sendState.value = SendState.Success(result.status, "Request completed")
                 }
             } catch (e: Exception) {
                 _sendState.value = SendState.Error(e.message ?: "Request failed")

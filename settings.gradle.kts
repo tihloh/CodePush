@@ -14,6 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "QR Data Sender"
+rootProject.name = "CodePush"
 include(":app")
-

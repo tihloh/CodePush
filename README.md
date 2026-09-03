@@ -1,4 +1,4 @@
-# QR Data Sender
+# CodePush
 
 A native Android scanner that sends QR/barcode contents to configurable HTTP endpoints.
 

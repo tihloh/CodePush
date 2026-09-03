@@ -17,8 +17,20 @@ private val LightColors = lightColorScheme(
     error = Color(0xFFBA1A1A)
 )
 
-@Composable
-fun QrTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = LightColors, typography = Typography(), content = content)
-}
+private val DarkColors = darkColorScheme(
+    primary = Color(0xFF87D7B5),
+    onPrimary = Color(0xFF003826),
+    primaryContainer = Color(0xFF005139),
+    onPrimaryContainer = Color(0xFFA7F3D0),
+    secondary = Color(0xFFB4CCBF),
+    tertiary = Color(0xFFA5CDDF),
+    background = Color(0xFF0F1512),
+    surface = Color(0xFF0F1512),
+    surfaceContainer = Color(0xFF1B211E),
+    error = Color(0xFFFFB4AB)
+)
 
+@Composable
+fun QrTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
+    MaterialTheme(colorScheme = if (darkTheme) DarkColors else LightColors, typography = Typography(), content = content)
+}
