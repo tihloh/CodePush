@@ -141,4 +141,18 @@ composer install
 composer check
 ```
 
-The source of truth lives in `tihloh/CodePush/packages/php`. The `tihloh/codepush-php` repository is intended only as the Composer distribution mirror for Packagist.
+The source of truth lives in `tihloh/CodePush/packages/php`. The `tihloh/codepush-php` repository is only the Composer distribution mirror.
+
+## Release
+
+The Android app and PHP package use separate tag namespaces in the source repository. PHP package releases use:
+
+```text
+php-v0.1.0
+php-v0.1.1
+...
+```
+
+The split workflow removes the `php-` prefix when publishing to `tihloh/codepush-php`, so `php-v0.1.0` becomes the normal Composer tag `v0.1.0` in the distribution repository.
+
+The source repository must have an Actions secret named `CODEPUSH_PHP_SPLIT_TOKEN` with permission to write repository contents to `tihloh/codepush-php`.
