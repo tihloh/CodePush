@@ -1,0 +1,21 @@
+{
+  "name": "tihloh/codepush",
+  "description": "PHP integration helpers for the CodePush Android scanner.",
+  "type": "library",
+  "license": "MIT",
+  "require": {
+    "php": ">=8.1"
+  },
+  "autoload": {
+    "psr-4": {
+      "Tihloh\\CodePush\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Tihloh\\CodePush\\Tests\\": "tests/"
+    }
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true
+}
