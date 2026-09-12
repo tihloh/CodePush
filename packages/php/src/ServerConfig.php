@@ -16,10 +16,11 @@ final class ServerConfig
         $name = trim($name);
         $url = trim($url);
         $method = strtoupper(trim($method));
+        $checkUrl = preg_replace('/\{\{?[^{}]+\}\}?/', 'value', $url) ?? $url;
+        $scheme = strtolower((string) parse_url($checkUrl, PHP_URL_SCHEME));
+        $host = (string) parse_url($checkUrl, PHP_URL_HOST);
         if ($name === '') throw new InvalidArgumentException('Server name is required.');
-        if (!filter_var($url, FILTER_VALIDATE_URL) || !in_array(parse_url($url, PHP_URL_SCHEME), ['http', 'https'], true)) {
-            throw new InvalidArgumentException('Server URL must be a valid HTTP or HTTPS URL.');
-        }
+        if (!in_array($scheme, ['http', 'https'], true) || $host === '') throw new InvalidArgumentException('Server URL must be a valid HTTP or HTTPS URL.');
         if (!in_array($method, ['GET', 'POST'], true)) throw new InvalidArgumentException('Method must be GET or POST.');
         $this->name = $name;
         $this->url = $url;
