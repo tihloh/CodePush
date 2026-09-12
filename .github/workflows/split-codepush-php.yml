@@ -1,0 +1,52 @@
+name: Split CodePush PHP package
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+    paths:
+      - 'packages/php/**'
+      - '.github/workflows/split-codepush-php.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  split:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Split packages/php
+        shell: bash
+        run: |
+          git subtree split --prefix=packages/php -b codepush-php-split
+
+      - name: Push distribution branch
+        env:
+          SPLIT_TOKEN: ${{ secrets.CODEPUSH_PHP_SPLIT_TOKEN }}
+        shell: bash
+        run: |
+          if [ -z "$SPLIT_TOKEN" ]; then
+            echo "Missing repository secret CODEPUSH_PHP_SPLIT_TOKEN"
+            exit 1
+          fi
+          git remote add distribution "https://x-access-token:${SPLIT_TOKEN}@github.com/tihloh/codepush-php.git"
+          git push --force distribution codepush-php-split:main
+
+      - name: Push matching package tag
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          SPLIT_TOKEN: ${{ secrets.CODEPUSH_PHP_SPLIT_TOKEN }}
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          SPLIT_SHA="$(git rev-parse codepush-php-split)"
+          git tag -f "$TAG" "$SPLIT_SHA"
+          git push --force distribution "refs/tags/$TAG"
