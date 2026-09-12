@@ -8,7 +8,7 @@ final class ServerConfig
     private string $name;
     private string $method;
     private string $url;
-    private array $fields = [];
+    private array $fields = [['name' => 'value', 'value' => '{scan}']];
     private ?array $responseRule = null;
 
     public function __construct(string $name, string $url, string $method = 'POST')
@@ -53,6 +53,13 @@ final class ServerConfig
         return $clone;
     }
 
+    public function withoutFields(): self
+    {
+        $clone = clone $this;
+        $clone->fields = [];
+        return $clone;
+    }
+
     public function responseRule(string $type, string $selector, string $operator, string $expected = '', ?string $followUpServerName = null): self
     {
         $type = strtoupper(trim($type));
@@ -85,7 +92,6 @@ final class ServerConfig
 
     public function toJson(int $flags = 0): string
     {
-        $json = json_encode($this->toArray(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR | $flags);
-        return $json;
+        return json_encode($this->toArray(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR | $flags);
     }
 }
