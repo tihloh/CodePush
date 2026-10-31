@@ -12,8 +12,8 @@ android {
         applicationId = "com.qrdatasender.app"
         minSdk = 23
         targetSdk = 35
-        versionCode = 10
-        versionName = "1.6.0"
+        versionCode = 11
+        versionName = "1.6.1"
     }
 
     buildFeatures { compose = true }
