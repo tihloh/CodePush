@@ -1,0 +1,44 @@
+name: CodePush Android 1.6.1 prerelease
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'gradle/**'
+      - 'gradlew'
+      - 'settings.gradle.kts'
+      - 'build.gradle.kts'
+      - '.github/workflows/android-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Build Android debug APK
+        run: bash ./gradlew --no-daemon :app:assembleDebug
+      - name: Copy versioned APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk CodePush-1.6.1-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CodePush-1.6.1-debug-apk
+          path: CodePush-1.6.1-debug.apk
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v1.6.1 >/dev/null 2>&1; then
+            gh release upload v1.6.1 CodePush-1.6.1-debug.apk --clobber
+          else
+            gh release create v1.6.1 CodePush-1.6.1-debug.apk --target "${GITHUB_SHA}" --title "CodePush Android v1.6.1 (test APK)" --prerelease --notes "Adds a scrollable full HTTP response viewer for scans, including HTTP 422 errors. This is a CI debug-signed test build, not a stable signed update. Its signature may differ from existing installations; do not uninstall an existing app without preserving your server configurations."
+          fi
