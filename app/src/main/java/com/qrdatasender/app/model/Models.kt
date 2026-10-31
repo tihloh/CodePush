@@ -38,5 +38,7 @@ sealed interface SendState {
 
 data class TransmissionDetails(
     val scanned: String,
-    val sent: String
+    val sent: String,
+    val status: Int? = null,
+    val response: String = ""
 )
