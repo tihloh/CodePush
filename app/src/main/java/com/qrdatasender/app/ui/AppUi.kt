@@ -231,6 +231,31 @@ private fun StatusCard(
     setShowDetails: (Boolean) -> Unit,
     details: TransmissionDetails?
 ) {
+    var showResponseDialog by remember { mutableStateOf(false) }
+    if(showResponseDialog && details != null) {
+        AlertDialog(
+            onDismissRequest = { showResponseDialog = false },
+            title = { Text("HTTP response" + (details.status?.let { " · $it" } ?: "")) },
+            text = {
+                Column(Modifier.fillMaxWidth().heightIn(max = 520.dp)) {
+                    val formatted = remember(details.response) {
+                        runCatching { org.json.JSONObject(details.response).toString(2) }
+                            .getOrElse { details.response }
+                    }
+                    androidx.compose.foundation.text.selection.SelectionContainer {
+                        Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                            Text("Request", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                            Text(details.sent, style = MaterialTheme.typography.bodySmall)
+                            Spacer(Modifier.height(12.dp))
+                            Text("Response body", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                            Text(formatted.ifBlank { "(empty response)" }, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showResponseDialog = false }) { Text("Close") } }
+        )
+    }
     val (icon, title, detail, color) = when (state) {
         SendState.Idle -> listOf(Icons.Default.CenterFocusStrong, "Ready to scan", "Scan a code or server setup QR", MaterialTheme.colorScheme.secondary)
         is SendState.Sending -> listOf(Icons.Default.CloudUpload, "Sending", "To ${state.serverName}", MaterialTheme.colorScheme.primary)
@@ -257,7 +282,13 @@ private fun StatusCard(
                 Text(details.scanned, style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(8.dp))
                 Text("Sent to server", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                Text(details.sent, style = MaterialTheme.typography.bodySmall)
+                Text(details.sent, maxLines = 3, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(8.dp))
+                TextButton(onClick = { showResponseDialog = true }) {
+                    Icon(Icons.Default.OpenInFull, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("View full HTTP response" + (details.status?.let { " ($it)" } ?: ""))
+                }
             }
         }
     }
