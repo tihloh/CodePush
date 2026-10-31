@@ -17,6 +17,12 @@ data class RequestResult(
     val sent: String
 )
 
+class HttpResponseException(
+    val status: Int,
+    val responseText: String,
+    val requestText: String
+) : IllegalStateException("HTTP $status: ${responseText.take(180)}")
+
 class RequestEngine(private val client: OkHttpClient = OkHttpClient()) {
     suspend fun send(config: ServerConfig, scannedValue: String): RequestResult = withContext(Dispatchers.IO) {
         val values = config.fields
@@ -53,12 +59,13 @@ class RequestEngine(private val client: OkHttpClient = OkHttpClient()) {
         }
         client.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
-            if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}: ${body.take(180)}")
+
             val sent = if (config.method == HttpMethod.GET) {
                 "GET ${request.url}"
             } else {
                 "POST ${request.url}\n${request.body?.let { bodyToText(it) }.orEmpty()}"
             }
+            if (!response.isSuccessful) throw HttpResponseException(response.code, body, sent)
             RequestResult(response.code, body, matches(config.responseRule, body), sent)
         }
     }
