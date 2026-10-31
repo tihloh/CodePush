@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.qrdatasender.app.data.ServerStore
 import com.qrdatasender.app.data.ServerQrParser
 import com.qrdatasender.app.model.*
+import com.qrdatasender.app.network.HttpResponseException
 import com.qrdatasender.app.network.RequestEngine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -97,12 +98,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val followUp = _servers.value.firstOrNull { it.id == server.responseRule.followUpServerId }
                         ?: error("Follow-up server no longer exists")
                     val next = engine.send(followUp, value)
-                    _transmissionDetails.value = TransmissionDetails(value, result.sent + "\n\nFollow-up:\n" + next.sent)
+                    _transmissionDetails.value = TransmissionDetails(value, result.sent + "\n\nFollow-up:\n" + next.sent, next.status, next.body)
                     _sendState.value = SendState.Success(next.status, "Sent to ${followUp.name}")
                 } else {
-                    _transmissionDetails.value = TransmissionDetails(value, result.sent)
+                    _transmissionDetails.value = TransmissionDetails(value, result.sent, result.status, result.body)
                     _sendState.value = SendState.Success(result.status, "Request completed")
                 }
+            } catch (e: HttpResponseException) {
+                _transmissionDetails.value = TransmissionDetails(value, e.requestText, e.status, e.responseText)
+                _sendState.value = SendState.Error("HTTP ${e.status} — tap details to view full response")
             } catch (e: Exception) {
                 _sendState.value = SendState.Error(e.message ?: "Request failed")
             } finally { busy = false }
