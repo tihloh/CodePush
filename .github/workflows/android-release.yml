@@ -24,7 +24,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
       - name: Build Android debug APK
         run: bash ./gradlew --no-daemon :app:assembleDebug
       - name: Copy versioned APK
