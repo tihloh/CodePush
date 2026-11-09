@@ -25,8 +25,8 @@ class ServerStore(context: Context) {
     fun setShowDetails(value: Boolean) = prefs.edit().putBoolean("show_details", value).apply()
     fun darkTheme(): Boolean = prefs.getBoolean("dark_theme", false)
     fun setDarkTheme(value: Boolean) = prefs.edit().putBoolean("dark_theme", value).apply()
-    fun screenTimeoutSeconds(): Int = prefs.getInt("screen_timeout_seconds", 60)
-    fun setScreenTimeoutSeconds(value: Int) = prefs.edit().putInt("screen_timeout_seconds", value).apply()
+    fun dimAfterSeconds(): Int = prefs.getInt("dim_after_seconds", 10)
+    fun setDimAfterSeconds(value: Int) = prefs.edit().putInt("dim_after_seconds", value).apply()
 
     private fun ServerConfig.toJson() = JSONObject().apply {
         put("id", id); put("name", name); put("method", method.name); put("url", url)
