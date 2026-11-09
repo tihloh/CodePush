@@ -12,8 +12,23 @@ android {
         applicationId = "com.qrdatasender.app"
         minSdk = 23
         targetSdk = 35
-        versionCode = 11
-        versionName = "1.6.1"
+        versionCode = 12
+        versionName = "1.6.2"
+    }
+
+    signingConfigs {
+        create("stableRelease") {
+            storeFile = System.getenv("CODEPUSH_KEYSTORE_PATH")?.let { file(it) }
+            storePassword = System.getenv("CODEPUSH_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("CODEPUSH_KEY_ALIAS")
+            keyPassword = System.getenv("CODEPUSH_KEY_PASSWORD")
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("stableRelease")
+        }
     }
 
     buildFeatures { compose = true }
