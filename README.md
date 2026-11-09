@@ -35,3 +35,47 @@ For `POST https://example.test/scan` with fields `code={scan}` and `station=fron
 ```json
 {"code":"ABC123","station":"front-desk"}
 ```
+
+## Stable Android releases
+
+CodePush publishes **stable, versioned release APKs only** using
+`.github/workflows/android-release.yml`. Debug APKs and prereleases are not
+published by this workflow.
+
+Each new stable release must increment **both** `versionCode` and
+`versionName` in `app/build.gradle.kts`. A push to `main` that changes
+Android application/build files runs tests, builds a signed release APK, and
+publishes `v<versionName>` with these assets:
+
+- `CodePush-<versionName>.apk`
+- `CodePush-<versionName>.apk.sha256`
+
+Existing versions are never overwritten. If the release tag already exists,
+the workflow skips publishing until the app version is incremented.
+
+### Required one-time GitHub Actions secrets
+
+Configure these under **Settings → Secrets and variables → Actions**:
+
+| Secret | Value |
+| --- | --- |
+| `CODEPUSH_KEYSTORE_BASE64` | Base64-encoded stable Android release keystore (entire JKS/PKCS12 file, without line breaks) |
+| `CODEPUSH_KEYSTORE_PASSWORD` | Keystore password |
+| `CODEPUSH_KEY_ALIAS` | Alias of the signing key |
+| `CODEPUSH_KEY_PASSWORD` | Signing key password |
+
+For example, to encode an *existing* release keystore on Linux:
+`base64 -w 0 release.jks`.
+On Windows PowerShell:
+`[Convert]::ToBase64String([IO.File]::ReadAllBytes("release.jks"))`.
+
+**Keep the original keystore and passwords backed up securely.** Do not
+commit them to Git. Never replace the signing key between releases: Android
+requires the same application ID and compatible signing identity to update
+an existing installation without uninstalling it. An existing debug-signed
+installation generally cannot be updated in place with the new
+release-signed APK; preserve/export configurations before switching.
+
+If signing secrets are missing, the build fails rather than publishing
+an unsigned or debug-signed artifact. The app's **About → App updates**
+checks the latest stable release, ignoring prereleases.
