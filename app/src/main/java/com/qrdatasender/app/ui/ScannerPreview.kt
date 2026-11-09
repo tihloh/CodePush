@@ -12,77 +12,115 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import com.google.mlkit.vision.barcode.BarcodeScanner
+import com.google.mlkit.vision.barcode.Barcode
 import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.Executors
-import kotlinx.coroutines.delay
+import java.util.concurrent.atomic.AtomicBoolean
 
 @SuppressLint("UnsafeOptInUsageError")
 @Composable
 fun ScannerPreview(
     modifier: Modifier = Modifier,
     enabled: Boolean,
-    activityKey: String?,
-    timeoutSeconds: Int,
+    showPreview: Boolean,
     onCode: (String) -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val executor = remember { Executors.newSingleThreadExecutor() }
-    val scanner = remember { BarcodeScanning.getClient() }
-    var keepAwake by remember { mutableStateOf(true) }
-
-    LaunchedEffect(activityKey, timeoutSeconds) {
-        keepAwake = true
-        if (timeoutSeconds > 0) {
-            delay(timeoutSeconds * 1_000L)
-            keepAwake = false
-        }
+    val mainExecutor = remember(context) { ContextCompat.getMainExecutor(context) }
+    val analyzerExecutor = remember { Executors.newSingleThreadExecutor() }
+    val scanner = remember {
+        BarcodeScanning.getClient(
+            BarcodeScannerOptions.Builder()
+                .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                .build()
+        )
+    }
+    val previewView = remember(context) {
+        PreviewView(context).apply { scaleType = PreviewView.ScaleType.FILL_CENTER }
+    }
+    val latestOnCode by rememberUpdatedState(onCode)
+    val latestEnabled by rememberUpdatedState(enabled)
+    val latestShowPreview by rememberUpdatedState(showPreview)
+    var provider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+    val preview = remember(previewView) {
+        Preview.Builder().build().also { it.surfaceProvider = previewView.surfaceProvider }
+    }
+    val analysis = remember {
+        ImageAnalysis.Builder()
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .build()
     }
 
-    AndroidView(
-        modifier = modifier,
-        factory = {
-            PreviewView(it).apply {
-                scaleType = PreviewView.ScaleType.FILL_CENTER
-                keepScreenOn = keepAwake
-            }
-        },
-        update = { previewView ->
-            previewView.keepScreenOn = keepAwake
-            val providerFuture = ProcessCameraProvider.getInstance(context)
-            providerFuture.addListener({
-                val provider = providerFuture.get()
-                val preview = Preview.Builder().build().also { it.surfaceProvider = previewView.surfaceProvider }
-                val analysis = ImageAnalysis.Builder()
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .build()
-                    .also { useCase ->
-                        useCase.setAnalyzer(executor) { imageProxy ->
-                            val mediaImage = imageProxy.image
-                            if (!enabled || mediaImage == null) { imageProxy.close(); return@setAnalyzer }
-                            val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-                            scanner.process(image)
-                                .addOnSuccessListener { list -> list.firstOrNull()?.rawValue?.let(onCode) }
-                                .addOnCompleteListener { imageProxy.close() }
-                        }
+    DisposableEffect(lifecycleOwner, previewView) {
+        val disposed = AtomicBoolean(false)
+        analysis.setAnalyzer(analyzerExecutor) { imageProxy ->
+            val mediaImage = imageProxy.image
+            if (!latestEnabled || mediaImage == null) {
+                imageProxy.close()
+            } else {
+                val image = InputImage.fromMediaImage(
+                    mediaImage, imageProxy.imageInfo.rotationDegrees
+                )
+                scanner.process(image)
+                    .addOnSuccessListener { results ->
+                        if (!disposed.get()) results.firstOrNull()?.rawValue?.let(latestOnCode)
                     }
-                runCatching {
-                    provider.unbindAll()
-                    provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
-                }
-            }, ContextCompat.getMainExecutor(context))
+                    .addOnCompleteListener { imageProxy.close() }
+            }
         }
-    )
 
-    DisposableEffect(Unit) {
-        onDispose { scanner.close(); executor.shutdown() }
+        val future = ProcessCameraProvider.getInstance(context)
+        future.addListener({
+            if (!disposed.get()) {
+                runCatching {
+                    val cameraProvider = future.get()
+                    cameraProvider.bindToLifecycle(
+                        lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, analysis
+                    )
+                    if (latestShowPreview) {
+                        cameraProvider.bindToLifecycle(
+                            lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview
+                        )
+                    }
+                    provider = cameraProvider
+                }
+            }
+        }, mainExecutor)
+
+        onDispose {
+            disposed.set(true)
+            provider?.unbind(preview, analysis)
+            provider = null
+            analysis.clearAnalyzer()
+            scanner.close()
+            analyzerExecutor.shutdown()
+        }
     }
+
+    LaunchedEffect(provider, showPreview) {
+        val cameraProvider = provider ?: return@LaunchedEffect
+        runCatching {
+            if (showPreview) {
+                if (!cameraProvider.isBound(preview)) {
+                    cameraProvider.bindToLifecycle(
+                        lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview
+                    )
+                }
+            } else if (cameraProvider.isBound(preview)) {
+                cameraProvider.unbind(preview)
+            }
+        }
+    }
+
+    AndroidView(modifier = modifier, factory = { previewView })
 }
