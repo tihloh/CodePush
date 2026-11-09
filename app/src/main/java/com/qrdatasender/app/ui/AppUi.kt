@@ -2,6 +2,13 @@ package com.qrdatasender.app.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.app.Activity
+import android.view.WindowManager
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.awaitPointerEventScope
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitEachGesture
+import kotlinx.coroutines.delay
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -121,12 +128,59 @@ private fun ScanScreen(
     val last by vm.lastScanned.collectAsStateWithLifecycle()
     val showDetails by vm.showDetails.collectAsStateWithLifecycle()
     val details by vm.transmissionDetails.collectAsStateWithLifecycle()
-    val screenTimeout by vm.screenTimeoutSeconds.collectAsStateWithLifecycle()
+    val dimAfterSeconds by vm.dimAfterSeconds.collectAsStateWithLifecycle()
     val importDraft by vm.importDraft.collectAsStateWithLifecycle()
     var menu by remember { mutableStateOf(false) }
+    var touchVersion by remember { mutableIntStateOf(0) }
+    var dimmed by remember { mutableStateOf(false) }
+    val activity = context as? Activity
+
+    LaunchedEffect(touchVersion, dimAfterSeconds) {
+        dimmed = false
+        if (dimAfterSeconds > 0) {
+            delay(dimAfterSeconds * 1_000L)
+            dimmed = true
+        }
+    }
+    DisposableEffect(activity) {
+        val window = activity?.window
+        val previousBrightness = window?.attributes?.screenBrightness
+        val hadKeepScreenOn = window?.attributes?.flags?.and(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) != 0
+        window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose {
+            if (window != null) {
+                if (previousBrightness != null) {
+                    val params = window.attributes
+                    params.screenBrightness = previousBrightness
+                    window.attributes = params
+                }
+                if (!hadKeepScreenOn) window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+        }
+    }
+    LaunchedEffect(activity, dimmed) {
+        activity?.window?.let { window ->
+            val params = window.attributes
+            params.screenBrightness =
+                if (dimmed) 0.05f else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+            window.attributes = params
+        }
+    }
+
     val selected = servers.firstOrNull { it.id == selectedId }
 
-    Column(modifier.fillMaxSize()) {
+    Column(
+        modifier.fillMaxSize().pointerInput(Unit) {
+            awaitEachGesture {
+                awaitPointerEventScope {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    if (event.changes.any { it.pressed && !it.previousPressed }) {
+                        touchVersion++
+                    }
+                }
+            }
+        }
+    ) {
         Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 10.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("CodePush", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -139,13 +193,18 @@ private fun ScanScreen(
                 ScannerPreview(
                     modifier = Modifier.fillMaxSize(),
                     enabled = state !is SendState.Sending && importDraft == null,
-                    activityKey = last,
-                    timeoutSeconds = screenTimeout,
+                    showPreview = !dimmed,
                     onCode = vm::onScanned
                 )
-                Box(Modifier.align(Alignment.Center).size(230.dp).border(3.dp, Color.White.copy(alpha = .9f), RoundedCornerShape(24.dp)))
-                Surface(Modifier.align(Alignment.TopCenter).padding(10.dp), color = Color.Black.copy(alpha = .58f), shape = RoundedCornerShape(50)) {
-                    Text("Align code inside frame", Modifier.padding(horizontal = 12.dp, vertical = 5.dp), color = Color.White, style = MaterialTheme.typography.bodySmall)
+                if (dimmed) {
+                    Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+                        Text("Scanning · Preview off", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                    }
+                } else {
+                    Box(Modifier.align(Alignment.Center).size(230.dp).border(3.dp, Color.White.copy(alpha = .9f), RoundedCornerShape(24.dp)))
+                    Surface(Modifier.align(Alignment.TopCenter).padding(10.dp), color = Color.Black.copy(alpha = .58f), shape = RoundedCornerShape(50)) {
+                        Text("Align code inside frame", Modifier.padding(horizontal = 12.dp, vertical = 5.dp), color = Color.White, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             } else {
                 Column(Modifier.align(Alignment.Center).padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -174,7 +233,7 @@ private fun ScanScreen(
 
 @Composable
 private fun SettingsScreen(vm: AppViewModel, darkTheme: Boolean, modifier: Modifier) {
-    val screenTimeout by vm.screenTimeoutSeconds.collectAsStateWithLifecycle()
+    val dimAfterSeconds by vm.dimAfterSeconds.collectAsStateWithLifecycle()
     Column(
         modifier.fillMaxSize().padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
@@ -193,8 +252,8 @@ private fun SettingsScreen(vm: AppViewModel, darkTheme: Boolean, modifier: Modif
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Scanner", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("Let Android sleep when no new code is scanned.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                ScreenTimeoutSelector(screenTimeout, vm::setScreenTimeoutSeconds)
+                Text("Keep QR scanning active while dimming the display and disabling live preview after inactivity. Touch anywhere to restore system brightness and preview.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                ScreenTimeoutSelector(dimAfterSeconds, vm::setDimAfterSeconds)
             }
         }
     }
@@ -203,14 +262,14 @@ private fun SettingsScreen(vm: AppViewModel, darkTheme: Boolean, modifier: Modif
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ScreenTimeoutSelector(current: Int, selected: (Int) -> Unit) {
-    val options = listOf(30 to "30 seconds", 60 to "1 minute", 120 to "2 minutes", 300 to "5 minutes", 0 to "Always awake")
+    val options = listOf(5 to "5 seconds", 10 to "10 seconds", 15 to "15 seconds", 30 to "30 seconds", 60 to "1 minute", 0 to "Never dim")
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
         OutlinedTextField(
-            value = options.firstOrNull { it.first == current }?.second ?: "1 minute",
+            value = options.firstOrNull { it.first == current }?.second ?: "10 seconds",
             onValueChange = {},
             readOnly = true,
-            label = { Text("Allow screen sleep after") },
+            label = { Text("Dim display after") },
             leadingIcon = { Icon(Icons.Default.Bedtime, null) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             modifier = Modifier.fillMaxWidth().menuAnchor()
