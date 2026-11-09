@@ -29,8 +29,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val transmissionDetails = _transmissionDetails.asStateFlow()
     private val _darkTheme = MutableStateFlow(store.darkTheme())
     val darkTheme = _darkTheme.asStateFlow()
-    private val _screenTimeoutSeconds = MutableStateFlow(store.screenTimeoutSeconds())
-    val screenTimeoutSeconds = _screenTimeoutSeconds.asStateFlow()
+    private val _dimAfterSeconds = MutableStateFlow(store.dimAfterSeconds())
+    val dimAfterSeconds = _dimAfterSeconds.asStateFlow()
     private var busy = false
     private val _importDraft = MutableStateFlow<ServerConfig?>(null)
     val importDraft = _importDraft.asStateFlow()
@@ -62,9 +62,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun clearLast() { _lastScanned.value = null; _sendState.value = SendState.Idle }
     fun setShowDetails(value: Boolean) { _showDetails.value = value; store.setShowDetails(value) }
     fun setDarkTheme(value: Boolean) { _darkTheme.value = value; store.setDarkTheme(value) }
-    fun setScreenTimeoutSeconds(value: Int) {
-        _screenTimeoutSeconds.value = value
-        store.setScreenTimeoutSeconds(value)
+    fun setDimAfterSeconds(value: Int) {
+        _dimAfterSeconds.value = value
+        store.setDimAfterSeconds(value)
     }
 
     fun onScanned(value: String) {
