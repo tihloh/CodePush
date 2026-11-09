@@ -1,4 +1,4 @@
-name: CodePush Android 1.6.1 prerelease
+name: CodePush stable Android release
 
 on:
   push:
@@ -15,8 +15,12 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: codepush-stable-release
+  cancel-in-progress: false
+
 jobs:
-  build-and-release:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,20 +31,76 @@ jobs:
       - uses: android-actions/setup-android@v4
         with:
           packages: 'platform-tools'
-      - name: Build Android debug APK
-        run: bash ./gradlew --no-daemon :app:assembleDebug
-      - name: Copy versioned APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk CodePush-1.6.1-debug.apk
-      - uses: actions/upload-artifact@v4
-        with:
-          name: CodePush-1.6.1-debug-apk
-          path: CodePush-1.6.1-debug.apk
-      - name: Publish GitHub prerelease
+
+      - name: Determine release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(sed -n 's/^[[:space:]]*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)
+          CODE=$(sed -n 's/^[[:space:]]*versionCode = \([0-9]*\).*/\1/p' app/build.gradle.kts | head -n 1)
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid stable versionName: $VERSION"; exit 1; }
+          [[ "$CODE" =~ ^[0-9]+$ ]] || { echo "Invalid versionCode"; exit 1; }
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version_code=$CODE" >> "$GITHUB_OUTPUT"
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "Release v$VERSION already exists. Increment versionName and versionCode for the next stable release."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Validate stable release signing secrets
+        if: steps.version.outputs.exists == 'false'
+        env:
+          KEYSTORE_B64: ${{ secrets.CODEPUSH_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.CODEPUSH_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.CODEPUSH_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.CODEPUSH_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [[ -n "$KEYSTORE_B64" && -n "$STORE_PASSWORD" && -n "$KEY_ALIAS" && -n "$KEY_PASSWORD" ]] || {
+            echo "::error::Stable APK signing secrets are missing. Configure CODEPUSH_KEYSTORE_BASE64, CODEPUSH_KEYSTORE_PASSWORD, CODEPUSH_KEY_ALIAS, and CODEPUSH_KEY_PASSWORD."; exit 1;
+          }
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/codepush-release.jks"
+          test -s "$RUNNER_TEMP/codepush-release.jks"
+          chmod 600 "$RUNNER_TEMP/codepush-release.jks"
+
+      - name: Run Android unit tests
+        if: steps.version.outputs.exists == 'false'
+        run: bash ./gradlew --no-daemon :app:testDebugUnitTest
+
+      - name: Build signed stable APK
+        if: steps.version.outputs.exists == 'false'
+        env:
+          CODEPUSH_KEYSTORE_PATH: ${{ runner.temp }}/codepush-release.jks
+          CODEPUSH_KEYSTORE_PASSWORD: ${{ secrets.CODEPUSH_KEYSTORE_PASSWORD }}
+          CODEPUSH_KEY_ALIAS: ${{ secrets.CODEPUSH_KEY_ALIAS }}
+          CODEPUSH_KEY_PASSWORD: ${{ secrets.CODEPUSH_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          bash ./gradlew --no-daemon :app:assembleRelease
+          APK="app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          cp "$APK" "CodePush-${{ steps.version.outputs.version }}.apk"
+          sha256sum "CodePush-${{ steps.version.outputs.version }}.apk" > "CodePush-${{ steps.version.outputs.version }}.apk.sha256"
+
+      - name: Publish stable GitHub release
+        if: steps.version.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v1.6.1 >/dev/null 2>&1; then
-            gh release upload v1.6.1 CodePush-1.6.1-debug.apk --clobber
-          else
-            gh release create v1.6.1 CodePush-1.6.1-debug.apk --target "${GITHUB_SHA}" --title "CodePush Android v1.6.1 (test APK)" --prerelease --notes "Adds a scrollable full HTTP response viewer for scans, including HTTP 422 errors. This is a CI debug-signed test build, not a stable signed update. Its signature may differ from existing installations; do not uninstall an existing app without preserving your server configurations."
-          fi
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          gh release create "v$VERSION" "CodePush-$VERSION.apk" "CodePush-$VERSION.apk.sha256" \
+            --target "$GITHUB_SHA" \
+            --title "CodePush v$VERSION" \
+            --latest \
+            --generate-notes
+
+      - name: Remove signing key from runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/codepush-release.jks"
