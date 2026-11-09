@@ -28,6 +28,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qrdatasender.app.AppViewModel
+import com.qrdatasender.app.update.AvailableUpdate
+import com.qrdatasender.app.update.UpdateChecker
+import kotlinx.coroutines.launch
 import com.qrdatasender.app.model.*
 
 private enum class Tab { SCAN, SERVERS, SETTINGS, ABOUT }
@@ -346,21 +349,84 @@ private fun ThemeButton(darkTheme: Boolean, setDarkTheme: (Boolean) -> Unit) {
 @Composable
 private fun AboutScreen(darkTheme: Boolean, setDarkTheme: (Boolean) -> Unit, modifier: Modifier) {
     val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+    val installedVersion = remember(context) {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0.0.0"
+    }
+    val scope = rememberCoroutineScope()
+    var checking by remember { mutableStateOf(false) }
+    var checked by remember { mutableStateOf(false) }
+    var availableUpdate by remember { mutableStateOf<AvailableUpdate?>(null) }
+    var updateError by remember { mutableStateOf<String?>(null) }
+
+    fun checkForUpdates() {
+        if (checking) return
+        checking = true
+        updateError = null
+        scope.launch {
+            try {
+                availableUpdate = UpdateChecker.check(installedVersion)
+                checked = true
+            } catch (error: Exception) {
+                updateError = error.message ?: "Unable to check for updates."
+            } finally {
+                checking = false
+            }
+        }
+    }
+
+    LaunchedEffect(installedVersion) { checkForUpdates() }
+
     Column(
-        modifier.fillMaxSize().padding(24.dp),
+        modifier.fillMaxSize().verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("About", Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             ThemeButton(darkTheme, setDarkTheme)
         }
-        Spacer(Modifier.weight(.7f))
+        Spacer(Modifier.height(28.dp))
         Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.primaryContainer) {
             Icon(Icons.Default.QrCodeScanner, null, Modifier.padding(22.dp).size(54.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
         }
         Spacer(Modifier.height(20.dp))
         Text("CodePush", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Version 1.6.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Version $installedVersion", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(20.dp))
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("App updates", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                when {
+                    checking -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Text("Checking for stable updates…")
+                    }
+                    updateError != null -> Text(updateError!!, color = MaterialTheme.colorScheme.error)
+                    availableUpdate != null -> {
+                        Text("Version ${availableUpdate!!.version} is available.")
+                        if (availableUpdate!!.apkUrl == null) {
+                            Text("This release has no stable APK attachment. Open its release page for details.", style = MaterialTheme.typography.bodySmall)
+                        } else {
+                            Text("Android will ask you to confirm the installation. Updates must use the same signing key as your installed app.", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Button(onClick = {
+                            uriHandler.openUri(availableUpdate!!.apkUrl ?: availableUpdate!!.releaseUrl)
+                        }) {
+                            Icon(Icons.Default.SystemUpdate, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (availableUpdate!!.apkUrl != null) "Download update" else "View release")
+                        }
+                    }
+                    checked -> Text("You're using the latest stable version.")
+                }
+                OutlinedButton(onClick = { checkForUpdates() }, enabled = !checking) {
+                    Icon(Icons.Default.Refresh, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Check for updates")
+                }
+            }
+        }
         Spacer(Modifier.height(28.dp))
         Text("Developed by", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text("Tihloh", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
@@ -371,7 +437,7 @@ private fun AboutScreen(darkTheme: Boolean, setDarkTheme: (Boolean) -> Unit, mod
             Spacer(Modifier.width(8.dp))
             Text("github.com/tihloh")
         }
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(28.dp))
         Text("Scan once. Route anywhere.", color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
