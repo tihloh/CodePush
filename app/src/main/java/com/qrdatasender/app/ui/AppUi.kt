@@ -5,7 +5,6 @@ import android.content.pm.PackageManager
 import android.app.Activity
 import android.view.WindowManager
 import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.awaitPointerEventScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.awaitEachGesture
 import kotlinx.coroutines.delay
@@ -172,11 +171,9 @@ private fun ScanScreen(
     Column(
         modifier.fillMaxSize().pointerInput(Unit) {
             awaitEachGesture {
-                awaitPointerEventScope {
-                    val event = awaitPointerEvent(PointerEventPass.Initial)
-                    if (event.changes.any { it.pressed && !it.previousPressed }) {
-                        touchVersion++
-                    }
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                if (event.changes.any { it.pressed && !it.previousPressed }) {
+                    touchVersion++
                 }
             }
         }
